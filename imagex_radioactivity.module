@@ -1,0 +1,184 @@
+<?php
+/**
+ * @file
+ * Code for the Radioactivity profiles feature.
+ */
+
+include_once 'imagex_radioactivity.features.inc';
+
+
+/**
+ * Implements hook_enable().
+ */
+function imagex_radioactivity_enable() {
+
+  // Set variable defaults and try to generate a bootstrap config file.
+  imagex_radioactivity_bootstrap_config();
+
+}
+
+/**
+ * Implements hook_ctools_render_alter().
+ */
+function imagex_radioactivity_ctools_render_alter(&$info, &$page, &$context) {
+
+  // TODO: What all does this hook into? What else is a ctools renderable? Are
+  //       there clear instances where Radioactivity definitely should not fire?
+
+  if (!empty($context['contexts'])) {
+
+    // I don't know why this is necessary, but just looping over the contexts
+    // array is throwing an unknown error.
+    $context_keys = array_keys($context['contexts']);
+
+    foreach ($context_keys as $key) {
+
+      $radioactivity_fields = $imagex_radioactivity = array();
+
+      // TODO: Get this from somewhere.
+      $lang = LANGUAGE_NONE;
+
+      $entity_type = $context['contexts'][$key]->get_keyword();
+      $entity_info = entity_get_info($entity_type);
+
+      // Find out if this context represents an entity page replacement. In
+      // some cases it might be useful to only allow panels views contexts
+      // to register a radioactivity view if they are full page replacements
+      // for ordinary entity pages eg. node/%node.
+      $is_entity_replacement = radioactivity_is_entity_page_replacement($entity_info['path'], arg());
+
+      $entity = $context['contexts'][$key]->data;
+
+      if (isset($entity->type)) {
+
+        $bundle = $entity->type;
+
+        $fields = field_info_instances($entity_type, $bundle);
+
+        foreach ($fields as $field) {
+
+          if ($field['widget']['type'] == 'radioactivity_basic_widget') {
+
+            $radioactivity_profile = radioactivity_decay_profile_load($field['settings']['profile']);
+
+            // TODO: Turn this into a setting.
+            if ($is_entity_replacement == TRUE) {
+
+              $field_name = $field['field_name'];
+              $id = $entity->$entity_info['entity keys']['id'];
+              $energy = $radioactivity_profile->cut_off;
+
+              $profile = radioactivity_get_field_profile($entity_type, $bundle, $field['field_name']);
+
+              if ($profile && $profile->storageObject) {
+
+                // TODO: What about flood protection? Does it need to be
+                //       handled here before adding the incident? Or, does the
+                //       add incident process do it?
+
+                $profile->storageObject->addIncident(new RadioactivityIncident($entity_type, $bundle, $field_name, $lang, $id, $energy, time()));
+
+              }
+
+              field_cache_clear();
+
+              // The other approach to set the field energy. I'm not exactly
+              // certain what the difference is between this and using the
+              // RadioactivityIncident object to addIncident.
+              /*_radioactivity_update_energy(
+                $entity_type,
+                $bundle,
+                $field['field_name'],
+                $lang,
+                $entity->$entity_info['entity keys']['id'],
+                $radioactivity_profile->cut_off,
+                time(),
+                FALSE
+              );*/
+
+            }
+
+          }
+
+        }
+
+      }
+
+    }
+
+  }
+
+}
+
+/**
+ * Helper to determine if this panel view is an override of an ordinary entity
+ * view page.
+ *
+ * @param $path
+ *   The path attribute as retrieved from the entity info.
+ * @param $args
+ *   The url arguments.
+ *
+ * @return
+ *   Boolean whether it's a replacement page or not.
+ */
+function radioactivity_is_entity_page_replacement($entity_path, $args) {
+
+  $replacement = TRUE;
+
+  // Mung $path to break it into path components.
+  $entity_path_args = explode('/', $entity_path);
+
+  foreach ($entity_path_args as $key => $entity_path_arg) {
+
+    // Check for unmatching path args.
+    if ($entity_path_arg != $args[$key]) {
+
+      // Make sure entity path arg isn't an entity load arg AND url arg isn't
+      // numeric.
+      if (drupal_substr($entity_path_arg, 0, 1) != '%' || !is_numeric($args[$key])) {
+
+        $replacement = FALSE;
+
+      }
+
+    }
+
+  }
+
+  return $replacement;
+
+}
+
+/**
+ * Sets defaults for the Radioactivity bootstrap config and tries to generate
+ * the bootstrap config file if it doesn't already exist.
+ */
+function imagex_radioactivity_bootstrap_config() {
+
+  global $base_path;
+
+  $filepath = drupal_get_path('module', 'radioactivity') . '/radioactivity-bootstrap.cfg.inc';
+
+  if (!file_exists($filepath)) {
+
+    $checksum = uniqid('', TRUE);
+    $temp_dir = sys_get_temp_dir();
+
+    variable_set('radioactivity_checksum_salt', $checksum);
+    variable_set('radioactivity_drupal_root', DRUPAL_ROOT . $base_path);
+    variable_set('radioactivity_temp_dir', $temp_dir);
+
+    $buffer = "<?php\n";
+
+    $buffer .= "define('VAR_RADIOACTIVITY_CHECKSUM_SALT', '" . $checksum . "')\n";
+    $buffer .= "define('VAR_RADIOACTIVITY_DRUPAL_ROOT', '" . DRUPAL_ROOT . $base_path . "')\n";
+    $buffer .= "define('VAR_RADIOACTIVITY_TEMP_DIR', '" . $temp_dir . "')";
+
+    if (!@file_put_contents($filepath, $buffer)) {
+      drupal_set_message(t('Failed to create radioactivity-bootstrap.cfg.inc. Verify the file permissions. Please create it manually using the instructions on the Radioactivity settings page.'), 'error');
+    }
+
+  }
+
+}
