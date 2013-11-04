@@ -35,8 +35,8 @@ function imagex_radioactivity_ctools_render_alter(&$info, &$page, &$context) {
 
       $radioactivity_fields = $imagex_radioactivity = array();
 
-      // TODO: Get this from somewhere.
-      $lang = LANGUAGE_NONE;
+      global $language;
+      $lang = $language->language;
 
       $entity_type = $context['contexts'][$key]->get_keyword();
       $entity_info = entity_get_info($entity_type);

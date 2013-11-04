@@ -1,5 +1,5 @@
 name = Radioactivity profiles
-description = Generic radioactivity profiles
+description = Generic radioactivity profiles.
 core = 7.x
 package = ImageX
 php = 5.2.4
