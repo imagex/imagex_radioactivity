@@ -18,4 +18,3 @@ features[radioactivity_decay_profile][] = no_decay
 features[radioactivity_decay_profile][] = counter
 features[variable][] = radioactivity_flood_protection
 features[variable][] = radioactivity_flood_timeout
-project path = sites/all/modules/custom
